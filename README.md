@@ -44,7 +44,7 @@ python3 simple_moderation.py serve
 python3 simple_moderation.py serve --host 127.0.0.1 --port 8080
 ```
 
-默认监听 `127.0.0.1:8000`，密钥只读取服务进程环境变量。服务不提供客户端鉴权；默认用于本机调用，若要对外提供服务，应由反向代理负责鉴权、TLS 和并发限制。
+默认监听 `127.0.0.1:8000`，密钥读取服务进程环境变量，也可用 `--api-key-file` 指定 UTF-8 密钥文件（文件优先）。服务不提供客户端鉴权；默认用于本机调用，若要对外提供服务，应由反向代理负责鉴权、TLS 和并发限制。
 
 ```bash
 curl http://127.0.0.1:8000/moderate \
@@ -92,3 +92,29 @@ DEEPSEEK_API_KEY='your-api-key' python3 test_moderation.py --live
 ```
 
 这会在离线检查后发起 12 次计费请求，检查中英文正反例、提示注入样例和一张无害图片。离线检查不能证明模型准确率；无害图片只验证图片调用链路，三类图片的识别效果仍需使用合法取得的标注图片验证。
+
+## Nix / NixOS
+
+Flake 提供 `packages.<system>.default`（x86_64-linux、aarch64-linux）及
+`nixosModules.default`。`nix build` 会先运行离线检查。
+
+```nix
+inputs.simple-moderation.url = "github:Antares0982/simple-moderation";
+inputs.simple-moderation.inputs.nixpkgs.follows = "nixpkgs";
+```
+
+在 NixOS 模块中导入并启用：
+
+```nix
+imports = [ inputs.simple-moderation.nixosModules.default ];
+services.simple-moderation = {
+  enable = true;
+  host = "127.0.0.1";
+  port = 18765;
+  apiKeyFile = config.age.secrets.deepseekApiKey.path;
+};
+```
+
+模块通过 systemd credentials 将密钥交给动态服务用户，不开放防火墙。
+`apiKeyFile` 必须指向运行时秘密文件，不能把明文写进 Nix 表达式或 store。
+轮换密钥后重启服务；部署仓库可用密文文件作为 `restartTriggers`。

@@ -58,12 +58,17 @@ class ModerationError(Exception):
 
 def read_key(path=None):
     try:
-        key = (Path(path).read_text(encoding="utf-8") if path is not None else
-               os.environ.get("DEEPSEEK_API_KEY", "")).strip()
+        key = (
+            Path(path).read_text(encoding="utf-8")
+            if path is not None
+            else os.environ.get("DEEPSEEK_API_KEY", "")
+        ).strip()
     except (OSError, UnicodeError):
         raise ModerationError("Cannot read API key file.") from None
     if not key:
-        raise ModerationError("Set DEEPSEEK_API_KEY or provide a nonempty API key file.")
+        raise ModerationError(
+            "Set DEEPSEEK_API_KEY or provide a nonempty API key file."
+        )
     if not key.isascii() or any(ord(c) <= 32 or ord(c) == 127 for c in key):
         raise ModerationError("Invalid API key format.")
     return key
@@ -101,13 +106,21 @@ def check_image(value):
         return value
     try:
         url = urlsplit(value)
-        if (url.scheme not in ("http", "https") or not url.hostname
-                or url.username is not None or url.password is not None):
+        if (
+            url.scheme not in ("http", "https")
+            or not url.hostname
+            or url.username is not None
+            or url.password is not None
+        ):
             raise ValueError
         url.port
     except ValueError:
-        raise ModerationError("Image must be an HTTP(S) URL or Base64 data URL.") from None
-    if len(value) > 8192 or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ModerationError(
+            "Image must be an HTTP(S) URL or Base64 data URL."
+        ) from None
+    if len(value) > 8192 or any(
+        c.isspace() or ord(c) < 32 or ord(c) == 127 for c in value
+    ):
         raise ModerationError("Invalid image URL or URL exceeds 8192 characters.")
     return value
 
@@ -135,7 +148,9 @@ def check_input(payload):
         if field == "text":
             content.append({"type": "text", "text": value})
         else:
-            content.append({"type": "image_url", "image_url": {"url": check_image(value)}})
+            content.append(
+                {"type": "image_url", "image_url": {"url": check_image(value)}}
+            )
     return content
 
 
@@ -148,21 +163,37 @@ def parse_result(data):
         if choice["message"].get("refusal"):
             raise ValueError
         categories = json.loads(choice["message"]["content"])
-        if (not isinstance(categories, dict) or set(categories) != set(CATEGORIES)
-                or any(type(value) is not bool for value in categories.values())):
+        if (
+            not isinstance(categories, dict)
+            or set(categories) != set(CATEGORIES)
+            or any(type(value) is not bool for value in categories.values())
+        ):
             raise ValueError
-    except (ValueError, KeyError, IndexError, TypeError, AttributeError, RecursionError):
-        raise ModerationError("DeepSeek returned an invalid or incomplete classification.", 502) from None
-    return {"flagged": any(categories.values()),
-            "categories": {name: categories[name] for name in CATEGORIES}}
+    except (
+        ValueError,
+        KeyError,
+        IndexError,
+        TypeError,
+        AttributeError,
+        RecursionError,
+    ):
+        raise ModerationError(
+            "DeepSeek returned an invalid or incomplete classification.", 502
+        ) from None
+    return {
+        "flagged": any(categories.values()),
+        "categories": {name: categories[name] for name in CATEGORIES},
+    }
 
 
 def moderate(payload, key):
     content = check_input(payload)
     request_body = {
         "model": MODEL,
-        "messages": [{"role": "system", "content": PROMPT},
-                     {"role": "user", "content": content}],
+        "messages": [
+            {"role": "system", "content": PROMPT},
+            {"role": "user", "content": content},
+        ],
         "response_format": {"type": "json_object"},
         "thinking": {"type": "enabled"},
         "reasoning_effort": "high",
@@ -226,9 +257,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get_content_type() != "application/json":
                 raise ModerationError("Content-Type must be application/json.")
             lengths = self.headers.get_all("Content-Length", [])
-            if (self.headers.get("Transfer-Encoding") is not None
-                    or len(lengths) != 1 or not lengths[0].isascii()
-                    or not lengths[0].isdigit()):
+            if (
+                self.headers.get("Transfer-Encoding") is not None
+                or len(lengths) != 1
+                or not lengths[0].isascii()
+                or not lengths[0].isdigit()
+            ):
                 raise ModerationError("A single valid Content-Length is required.")
             if len(lengths[0]) > 10 or int(lengths[0]) > MAX_BODY:
                 raise ModerationError("Request exceeds 48 MiB.", 413)
@@ -239,7 +273,9 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError
                 payload = json.loads(raw.decode("utf-8"))
             except (ValueError, OSError, RecursionError):
-                raise ModerationError("Request must contain a complete UTF-8 JSON body.") from None
+                raise ModerationError(
+                    "Request must contain a complete UTF-8 JSON body."
+                ) from None
             result = moderate(payload, self.server.api_key)
         except ModerationError as error:
             self.send_json(error.status, {"error": str(error)})
@@ -255,10 +291,15 @@ def main():
     check = commands.add_parser("check", help="Check text and/or an image")
     check.add_argument("--text", help="Text to classify; - reads stdin")
     check.add_argument("--image", help="Image path, HTTP(S) URL, or Base64 data URL")
-    check.add_argument("--api-key-file", help="UTF-8 key file; overrides DEEPSEEK_API_KEY")
+    check.add_argument(
+        "--api-key-file", help="UTF-8 key file; overrides DEEPSEEK_API_KEY"
+    )
     server = commands.add_parser("serve", help="Run the HTTP server")
     server.add_argument("--host", default="127.0.0.1")
     server.add_argument("--port", type=int, default=8000)
+    server.add_argument(
+        "--api-key-file", help="UTF-8 key file; overrides DEEPSEEK_API_KEY"
+    )
     args = parser.parse_args()
     try:
         key = read_key(getattr(args, "api_key_file", None))
@@ -272,7 +313,9 @@ def main():
             return 0
         payload = {}
         if args.text is not None:
-            payload["text"] = sys.stdin.read(MAX_BODY + 1) if args.text == "-" else args.text
+            payload["text"] = (
+                sys.stdin.read(MAX_BODY + 1) if args.text == "-" else args.text
+            )
         if args.image is not None:
             payload["image"] = load_image(args.image)
         result = moderate(payload, key)
@@ -282,7 +325,10 @@ def main():
         print(json.dumps({"error": str(error)}, ensure_ascii=False), file=sys.stderr)
         return 2
     except (OSError, UnicodeError):
-        print(json.dumps({"error": "Cannot read input or start the server."}), file=sys.stderr)
+        print(
+            json.dumps({"error": "Cannot read input or start the server."}),
+            file=sys.stderr,
+        )
         return 2
     except KeyboardInterrupt:
         return 130
