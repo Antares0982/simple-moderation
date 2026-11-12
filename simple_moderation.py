@@ -154,13 +154,20 @@ def check_input(payload):
     return content
 
 
-def parse_result(data):
+def parse_result(data, *, include_reasoning=False):
     try:
         response = json.loads(data)
         choice = response["choices"][0]
         if choice["finish_reason"] != "stop":
             raise ValueError
         if choice["message"].get("refusal"):
+            raise ValueError
+        reasoning = choice["message"].get("reasoning_content")
+        if (
+            include_reasoning
+            and reasoning is not None
+            and not isinstance(reasoning, str)
+        ):
             raise ValueError
         categories = json.loads(choice["message"]["content"])
         if (
@@ -180,13 +187,16 @@ def parse_result(data):
         raise ModerationError(
             "DeepSeek returned an invalid or incomplete classification.", 502
         ) from None
-    return {
+    result = {
         "flagged": any(categories.values()),
         "categories": {name: categories[name] for name in CATEGORIES},
     }
+    if include_reasoning:
+        result["reasoning_content"] = reasoning
+    return result
 
 
-def moderate(payload, key):
+def moderate(payload, key, *, include_reasoning=False):
     content = check_input(payload)
     request_body = {
         "model": MODEL,
@@ -223,7 +233,7 @@ def moderate(payload, key):
         raise ModerationError("DeepSeek connection failed.", 502) from None
     if len(data) > MAX_RESPONSE:
         raise ModerationError("DeepSeek response exceeds the size limit.", 502)
-    return parse_result(data)
+    return parse_result(data, include_reasoning=include_reasoning)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -292,6 +302,11 @@ def main():
     check.add_argument("--text", help="Text to classify; - reads stdin")
     check.add_argument("--image", help="Image path, HTTP(S) URL, or Base64 data URL")
     check.add_argument(
+        "--reasoning",
+        action="store_true",
+        help="Include DeepSeek reasoning in JSON output",
+    )
+    check.add_argument(
         "--api-key-file", help="UTF-8 key file; overrides DEEPSEEK_API_KEY"
     )
     server = commands.add_parser("serve", help="Run the HTTP server")
@@ -318,7 +333,7 @@ def main():
             )
         if args.image is not None:
             payload["image"] = load_image(args.image)
-        result = moderate(payload, key)
+        result = moderate(payload, key, include_reasoning=args.reasoning)
         print(json.dumps(result, ensure_ascii=False))
         return int(result["flagged"])
     except ModerationError as error:

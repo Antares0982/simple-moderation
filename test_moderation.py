@@ -298,6 +298,25 @@ def offline():
             result = cli(url, "check", "--text", "hello")
             assert result.returncode == 1 and json.loads(result.stdout)["flagged"]
             assert upstream.requests[-1][0] == "Bearer environment-key"
+            response = json.loads(upstream.response)
+            for reasoning in ("Non-JSON reasoning.", None, 123):
+                response["choices"][0]["message"]["reasoning_content"] = reasoning
+                upstream.response = json.dumps(response).encode()
+                result = cli(url, "check", "--text", "hello", "--reasoning")
+                if reasoning == 123:
+                    assert result.returncode == 2 and not result.stdout
+                else:
+                    assert result.returncode == 1 and not result.stderr
+                    assert json.loads(result.stdout) == {
+                        "flagged": True,
+                        "categories": dict(SAFE, sexual=True),
+                        "reasoning_content": reasoning,
+                    }
+            del response["choices"][0]["message"]["reasoning_content"]
+            upstream.response = json.dumps(response).encode()
+            result = cli(url, "check", "--text", "hello", "--reasoning")
+            assert result.returncode == 1
+            assert json.loads(result.stdout)["reasoning_content"] is None
             upstream.response = completion(" ")
             result = cli(url, "check", "--text", "hello")
             assert (

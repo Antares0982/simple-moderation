@@ -35,6 +35,13 @@ python3 simple_moderation.py check --text '待检测文本' \
 
 stdout 只输出结果 JSON，错误写入 stderr。退出码：`0` 未命中、`1` 命中、`2` 输入或检测失败。
 
+`check --reasoning` 在结果 JSON 中额外输出 DeepSeek 返回的 `reasoning_content` 原文；默认不输出。上游未返回该字段时输出 `null`，分类与退出码不变：
+
+```bash
+python3 simple_moderation.py check --image ./photo.png --reasoning \
+  --api-key-file ~/configs/deepseek_api_key.txt
+```
+
 ## HTTP server
 
 ```bash
@@ -58,7 +65,7 @@ curl http://127.0.0.1:8000/moderate \
 
 `POST /moderate` 只接受 `text` 和 `image` 字段，至少提供一个非空字符串。同时提供时联合判断，返回一个结果。`image` 接受 HTTP(S) URL 或 `data:image/png;base64,...` 等 data URL；HTTP 接口不接受本地文件路径。请求必须带 `Content-Length`，不支持分块上传。
 
-HTTP 和 CLI 的结果格式一致：
+HTTP 和默认 CLI 的结果格式一致：
 
 ```json
 {
