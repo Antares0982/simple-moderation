@@ -206,7 +206,7 @@ def moderate(payload, key, *, include_reasoning=False):
         ],
         "response_format": {"type": "json_object"},
         "thinking": {"type": "enabled"},
-        "reasoning_effort": "high",
+        "reasoning_effort": "low",
         "stream": False,
     }
     try:

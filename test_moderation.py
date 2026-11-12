@@ -149,7 +149,7 @@ def offline():
                 assert request["model"] == "deepseek-flash"
                 assert request["response_format"] == {"type": "json_object"}
                 assert request["thinking"] == {"type": "enabled"}
-                assert request["reasoning_effort"] == "high"
+                assert request["reasoning_effort"] == "low"
                 assert "temperature" not in request and "max_tokens" not in request
                 assert request["messages"][0] == {
                     "role": "system",
